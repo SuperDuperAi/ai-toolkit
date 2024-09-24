@@ -174,6 +174,7 @@ class BaseSDTrainProcess(BaseTrainProcess):
             train_adapter=is_training_adapter,
             train_embedding=self.embed_config is not None,
             train_refiner=self.train_config.train_refiner,
+            unload_text_encoder=self.train_config.unload_text_encoder
         )
 
         # fine_tuning here is for training actual SD network, not LoRA, embeddings, etc. it is (Dreambooth, etc)
@@ -1750,6 +1751,11 @@ class BaseSDTrainProcess(BaseTrainProcess):
                         if self.train_config.free_u:
                             self.sd.pipeline.disable_freeu()
                         self.sample(self.step_num)
+                        if self.train_config.unload_text_encoder:
+                            # make sure the text encoder is unloaded
+                            self.sd.text_encoder_to('cpu')
+                        flush()
+
                         self.ensure_params_requires_grad()
                         self.progress_bar.unpause()
 
@@ -1968,7 +1974,7 @@ from diffusers import AutoPipelineForText2Image
 import torch
 
 pipeline = AutoPipelineForText2Image.from_pretrained('{base_model}', torch_dtype={dtype}).to('cuda')
-pipeline.load_lora_weights('{repo_id}', weight_name='{self.job.name}')
+pipeline.load_lora_weights('{repo_id}', weight_name='{self.job.name}.safetensors')
 image = pipeline('{instance_prompt if not widgets else self.sample_config.prompts[0]}').images[0]
 image.save("my_image.png")
 ```
