@@ -913,10 +913,15 @@ class BaseSDTrainProcess(BaseTrainProcess):
                         num_train_timesteps, device=self.device_torch, original_inference_steps=num_train_timesteps
                     )
                 elif self.train_config.noise_scheduler == 'flowmatch':
+                    linear_timesteps = any([
+                        self.train_config.linear_timesteps,
+                        self.train_config.linear_timesteps2,
+                        self.train_config.timestep_type == 'linear',
+                    ])
                     self.sd.noise_scheduler.set_train_timesteps(
                         num_train_timesteps,
                         device=self.device_torch,
-                        linear=self.train_config.linear_timesteps or self.train_config.linear_timesteps2
+                        linear=linear_timesteps
                     )
                 else:
                     self.sd.noise_scheduler.set_timesteps(
@@ -1656,8 +1661,10 @@ class BaseSDTrainProcess(BaseTrainProcess):
                 batch_list = []
 
                 for b in range(self.train_config.gradient_accumulation):
+                    # keep track to alternate on an accumulation step for reg   
+                    batch_step = step
                     # don't do a reg step on sample or save steps as we dont want to normalize on those
-                    if step % 2 == 0 and dataloader_reg is not None and not is_save_step and not is_sample_step:
+                    if batch_step % 2 == 0 and dataloader_reg is not None and not is_save_step and not is_sample_step:
                         try:
                             with self.timer('get_batch:reg'):
                                 batch = next(dataloader_iterator_reg)
@@ -1693,6 +1700,7 @@ class BaseSDTrainProcess(BaseTrainProcess):
                     else:
                         batch = None
                     batch_list.append(batch)
+                    batch_step += 1
 
                 # setup accumulation
                 if self.train_config.gradient_accumulation_steps == -1:
